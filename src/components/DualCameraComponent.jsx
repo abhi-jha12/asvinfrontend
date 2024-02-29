@@ -43,7 +43,8 @@ const DualCameraComponent = () => {
   const captureFrames = async () => {
     const imageSrc1 = webcamRef1.current.getScreenshot();
     const imageSrc2 = webcamRef2.current.getScreenshot();
-
+  
+    // Existing function unchanged
     const convertDataURLtoBlob = (dataURL) => {
       let byteString;
       if (dataURL.split(',')[0].indexOf('base64') >= 0) {
@@ -51,39 +52,47 @@ const DualCameraComponent = () => {
       } else {
         byteString = unescape(dataURL.split(',')[1]);
       }
-
+  
       const mimeString = dataURL.split(',')[0].split(':')[1].split(';')[0];
       const ab = new ArrayBuffer(byteString.length);
       const ia = new Uint8Array(ab);
-
+  
       for (let i = 0; i < byteString.length; i++) {
         ia[i] = byteString.charCodeAt(i);
       }
-
+  
       return new Blob([ab], { type: mimeString });
     };
-
-    const uploadImage = async (imageBlob, cameraId) => {
-      const timestamp = new Date().toISOString().replace(/:/g, '-');
-      const folderName = cameraId === 1 ? 'camera1' : 'camera2';
-      const imagePath = `${folderName}/${timestamp}.jpg`;
-
-      const imageRef = ref(storage, imagePath);
-      try {
-        const snapshot = await uploadBytes(imageRef, imageBlob);
-        const url = await getDownloadURL(snapshot.ref);
-        console.log(`Image uploaded successfully: ${url}`);
-      } catch (error) {
-        console.error("Error uploading image:", error);
-      }
+  
+    // Function to rotate image blob
+    const rotateImage = async (imageBlob) => {
+      return new Promise((resolve, reject) => {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        const img = new Image();
+        img.onload = () => {
+          // Set canvas size to image size
+          canvas.width = img.width;
+          canvas.height = img.height;
+          // Rotate the image
+          ctx.translate(canvas.width / 2, canvas.height / 2);
+          ctx.rotate(Math.PI); // 180 degrees
+          ctx.drawImage(img, -img.width / 2, -img.height / 2);
+          // Convert canvas to blob
+          canvas.toBlob(resolve, 'image/jpeg');
+        };
+        img.onerror = reject;
+        img.src = URL.createObjectURL(imageBlob);
+      });
     };
-
+  
     const blob1 = convertDataURLtoBlob(imageSrc1);
-    const blob2 = convertDataURLtoBlob(imageSrc2);
-
+    const blob2 = await rotateImage(convertDataURLtoBlob(imageSrc2)); // Rotate image from camera 2
+  
     await uploadImage(blob1, 1); // For camera 1
-    await uploadImage(blob2, 2); // For camera 2
+    await uploadImage(blob2, 2); // Upload rotated image for camera 2
   };
+  
 
   return (
     <div>
@@ -104,6 +113,7 @@ const DualCameraComponent = () => {
             ref={webcamRef2}
             screenshotFormat="image/jpeg"
             videoConstraints={videoConstraints2}
+            style={{ transform: 'rotate(180deg)' }} // Apply rotation here
           />
         ) : (
           <div>No Camera 2 Detected</div>
